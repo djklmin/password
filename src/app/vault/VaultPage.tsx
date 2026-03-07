@@ -1,0 +1,328 @@
+'use client'
+
+import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
+import { useVault, VaultItemType } from '@/contexts/VaultContext'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
+import { AddItemModal } from '@/components/vault/AddItemModal'
+import { VaultItemCard } from '@/components/vault/VaultItemCard'
+import { PasswordGenerator } from '@/components/vault/PasswordGenerator'
+import { ImportExport } from '@/components/vault/ImportExport'
+
+export default function VaultPage() {
+  const { user, signOut, lockVault, unlockVault, isVaultUnlocked } = useAuth()
+  const { items, folders, addFolder, deleteFolder, loading } = useVault()
+  const router = useRouter()
+  
+  const [search, setSearch] = useState('')
+  const [selectedType, setSelectedType] = useState<VaultItemType | 'all'>('all')
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showPasswordGen, setShowPasswordGen] = useState(false)
+  const [showImportExport, setShowImportExport] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [showFolderModal, setShowFolderModal] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [showUnlockModal, setShowUnlockModal] = useState(false)
+  const [unlockPassword, setUnlockPassword] = useState('')
+  const [unlockError, setUnlockError] = useState('')
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
+        (item.type === 'login' && (item.data as { username: string }).username?.toLowerCase().includes(search.toLowerCase()))
+      const matchesType = selectedType === 'all' || item.type === selectedType
+      const matchesFolder = selectedFolder === null || item.folderId === selectedFolder
+      return matchesSearch && matchesType && matchesFolder
+    })
+  }, [items, search, selectedType, selectedFolder])
+
+  const favoriteItems = filteredItems.filter((item) => item.favorite)
+  const regularItems = filteredItems.filter((item) => !item.favorite)
+
+  const handleSignOut = () => {
+    signOut()
+    router.push('/')
+  }
+
+  const handleLock = () => {
+    lockVault()
+    setShowUnlockModal(true)
+  }
+
+  const handleUnlock = async () => {
+    setUnlockError('')
+    const { error } = await unlockVault(unlockPassword)
+    if (error) {
+      setUnlockError(error)
+    } else {
+      setShowUnlockModal(false)
+      setUnlockPassword('')
+    }
+  }
+
+  const handleAddFolder = async () => {
+    if (!newFolderName.trim()) return
+    await addFolder(newFolderName.trim())
+    setNewFolderName('')
+    setShowFolderModal(false)
+  }
+
+  const typeFilters: { value: VaultItemType | 'all'; label: string; icon: string }[] = [
+    { value: 'all', label: 'All', icon: '📁' },
+    { value: 'login', label: 'Logins', icon: '🔑' },
+    { value: 'secure_note', label: 'Notes', icon: '📝' },
+    { value: 'card', label: 'Cards', icon: '💳' },
+    { value: 'identity', label: 'Identity', icon: '👤' },
+  ]
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="bg-surface border-b border-border sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <span className="font-semibold text-text">SecureVault</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => setShowPasswordGen(true)}>
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                Generator
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowImportExport(true)}>
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                Import/Export
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleLock}>
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Lock
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign Out
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex gap-6">
+          <aside className="w-64 shrink-0">
+            <div className="bg-surface border border-border rounded-xl p-4 sticky top-24">
+              <Button onClick={() => setShowAddModal(true)} className="w-full mb-4">
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Item
+              </Button>
+
+              <div className="space-y-1 mb-4">
+                {typeFilters.map((filter) => (
+                  <button
+                    key={filter.value}
+                    onClick={() => setSelectedType(filter.value)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+                      selectedType === filter.value
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-textMuted hover:bg-surfaceHover hover:text-text'
+                    }`}
+                  >
+                    <span>{filter.icon}</span>
+                    <span className="text-sm">{filter.label}</span>
+                    <span className="ml-auto text-xs text-textMuted">
+                      {filter.value === 'all' ? items.length : items.filter((i) => i.type === filter.value).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-textMuted uppercase">Folders</span>
+                  <button
+                    onClick={() => setShowFolderModal(true)}
+                    className="text-textMuted hover:text-text"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setSelectedFolder(null)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors ${
+                      selectedFolder === null
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-textMuted hover:bg-surfaceHover hover:text-text'
+                    }`}
+                  >
+                    <span>📁</span>
+                    <span className="text-sm">All Items</span>
+                  </button>
+                  {folders.map((folder) => (
+                    <button
+                      key={folder.id}
+                      onClick={() => setSelectedFolder(folder.id)}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-colors group ${
+                        selectedFolder === folder.id
+                          ? 'bg-primary/10 text-primary'
+                          : 'text-textMuted hover:bg-surfaceHover hover:text-text'
+                      }`}
+                    >
+                      <span>📁</span>
+                      <span className="text-sm flex-1 truncate">{folder.name}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteFolder(folder.id)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-textMuted hover:text-danger"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <main className="flex-1">
+            <div className="mb-6">
+              <Input
+                type="search"
+                placeholder="Search vault..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                icon={
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                }
+              />
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : filteredItems.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-text mb-1">No items found</h3>
+                <p className="text-textMuted mb-4">
+                  {search ? 'Try a different search term' : 'Add your first item to get started'}
+                </p>
+                <Button onClick={() => setShowAddModal(true)}>
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Item
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {favoriteItems.length > 0 && (
+                  <div>
+                    <h2 className="text-sm font-medium text-textMuted mb-3 flex items-center gap-2">
+                      <span className="text-warning">★</span> Favorites
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {favoriteItems.map((item) => (
+                        <VaultItemCard key={item.id} item={item} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {regularItems.length > 0 && (
+                  <div>
+                    {favoriteItems.length > 0 && (
+                      <h2 className="text-sm font-medium text-textMuted mb-3">All Items</h2>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {regularItems.map((item) => (
+                        <VaultItemCard key={item.id} item={item} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
+
+      <AddItemModal isOpen={showAddModal} onClose={() => setShowAddModal(false)} />
+      <PasswordGenerator isOpen={showPasswordGen} onClose={() => setShowPasswordGen(false)} />
+      <ImportExport isOpen={showImportExport} onClose={() => setShowImportExport(false)} />
+
+      <Modal isOpen={showFolderModal} onClose={() => setShowFolderModal(false)} title="New Folder" size="sm">
+        <div className="space-y-4">
+          <Input
+            label="Folder Name"
+            placeholder="Enter folder name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowFolderModal(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleAddFolder} className="flex-1">
+              Create
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showUnlockModal} onClose={() => setShowUnlockModal(false)} title="Vault Locked" size="sm">
+        <div className="space-y-4">
+          <p className="text-textMuted text-sm">Enter your master password to unlock the vault.</p>
+          <Input
+            type="password"
+            placeholder="Master password"
+            value={unlockPassword}
+            onChange={(e) => setUnlockPassword(e.target.value)}
+            error={unlockError}
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => router.push('/')} className="flex-1">
+              Sign Out
+            </Button>
+            <Button onClick={handleUnlock} className="flex-1">
+              Unlock
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}
