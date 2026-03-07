@@ -34,6 +34,8 @@
 
 点击上方按钮，将项目克隆到你的 GitHub 并部署到 Vercel。
 
+[![Deploy with netlifyl](https://www.netlify.com/img/deploy/button.svg)](https://netlify.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdjklmin%2Fpassword)
+
 ### 步骤 2：创建 Supabase 项目
 
 1. 访问 [supabase.com](https://supabase.com) 注册并创建新项目
