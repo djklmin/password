@@ -1,0 +1,416 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/AuthContext'
+import { useVault } from '@/contexts/VaultContext'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
+import { resetDatabase } from '@/lib/init'
+
+export default function SettingsPage() {
+  const { user, signOut, changePassword, updateSiteSettings } = useAuth()
+  const { items, addItem } = useVault()
+  const router = useRouter()
+
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showReset, setShowReset] = useState(false)
+  const [showCsvImport, setShowCsvImport] = useState(false)
+  const [showSiteSettings, setShowSiteSettings] = useState(false)
+
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
+
+  const [resetLoading, setResetLoading] = useState(false)
+  const [csvLoading, setCsvLoading] = useState(false)
+  const [csvError, setCsvError] = useState('')
+  const [csvSuccess, setCsvSuccess] = useState('')
+
+  const [siteTitle, setSiteTitle] = useState('')
+  const [siteIcon, setSiteIcon] = useState('')
+  const [siteSettingsLoading, setSiteSettingsLoading] = useState(false)
+  const [siteSettingsError, setSiteSettingsError] = useState('')
+  const [siteSettingsSuccess, setSiteSettingsSuccess] = useState('')
+
+  useEffect(() => {
+    if (user) {
+      setSiteTitle(user.siteTitle || 'SecureVault密码管理器')
+      setSiteIcon(user.siteIcon || 'https://djkl.qzz.io/file/1770081419896_头像.webp')
+    }
+  }, [user])
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordError('')
+    setPasswordSuccess('')
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('两次密码不一致')
+      return
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError('密码至少需要8个字符')
+      return
+    }
+
+    setPasswordLoading(true)
+    const result = await changePassword(oldPassword, newPassword)
+    setPasswordLoading(false)
+
+    if (result.error) {
+      setPasswordError(result.error)
+    } else {
+      setPasswordSuccess('密码修改成功')
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setTimeout(() => setShowChangePassword(false), 1500)
+    }
+  }
+
+  const handleReset = async () => {
+    setResetLoading(true)
+    const result = await resetDatabase()
+    setResetLoading(false)
+
+    if (result.error) {
+      alert('重置失败: ' + result.error)
+    } else {
+      signOut()
+      router.push('/')
+    }
+  }
+
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setCsvLoading(true)
+    setCsvError('')
+    setCsvSuccess('')
+
+    try {
+      const text = await file.text()
+      const lines = text.split('\n').filter((line) => line.trim())
+      
+      if (lines.length < 2) {
+        throw new Error('CSV 文件为空或格式不正确')
+      }
+
+      const header = lines[0].toLowerCase().split(',').map((h) => h.trim().replace(/"/g, ''))
+      const nameIndex = header.findIndex((h) => h === 'name' || h === '名称')
+      const urlIndex = header.findIndex((h) => h === 'url' || h === '网址' || h === 'website')
+      const usernameIndex = header.findIndex((h) => h === 'username' || h === '用户名')
+      const passwordIndex = header.findIndex((h) => h === 'password' || h === '密码')
+      const notesIndex = header.findIndex((h) => h === 'notes' || h === '备注')
+
+      if (nameIndex === -1) {
+        throw new Error('CSV 文件缺少名称列')
+      }
+
+      let imported = 0
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map((v) => v.trim().replace(/^"|"$/g, ''))
+        
+        if (values.length < 1 || !values[nameIndex]) continue
+
+        const data = {
+          username: usernameIndex !== -1 ? values[usernameIndex] || '' : '',
+          password: passwordIndex !== -1 ? values[passwordIndex] || '' : '',
+          url: urlIndex !== -1 ? values[urlIndex] || '' : '',
+          notes: notesIndex !== -1 ? values[notesIndex] || '' : '',
+        }
+
+        const result = await addItem({
+          type: 'login',
+          name: values[nameIndex],
+          data,
+          folderId: null,
+          favorite: false,
+        })
+
+        if (!result.error) imported++
+      }
+
+      setCsvSuccess(`成功导入 ${imported} 个项目`)
+    } catch (err) {
+      setCsvError(err instanceof Error ? err.message : '导入失败，请检查文件格式')
+    } finally {
+      setCsvLoading(false)
+      e.target.value = ''
+    }
+  }
+
+  const handleSiteSettings = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSiteSettingsError('')
+    setSiteSettingsSuccess('')
+    setSiteSettingsLoading(true)
+
+    const result = await updateSiteSettings(siteTitle, siteIcon)
+    setSiteSettingsLoading(false)
+
+    if (result.error) {
+      setSiteSettingsError(result.error)
+    } else {
+      setSiteSettingsSuccess('设置已保存')
+      setTimeout(() => {
+        setShowSiteSettings(false)
+        setSiteSettingsSuccess('')
+      }, 1500)
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="bg-surface border-b border-border sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push('/vault')}
+                className="flex items-center gap-2 text-textMuted hover:text-text"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                返回
+              </button>
+              <h1 className="text-lg font-semibold text-text">设置</h1>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        <div className="space-y-6">
+          <div className="bg-surface border border-border rounded-xl p-6">
+            <h2 className="text-lg font-medium text-text mb-4">账户信息</h2>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-textMuted">用户名</span>
+                <span className="text-text">{user?.username}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-surface border border-border rounded-xl p-6">
+            <h2 className="text-lg font-medium text-text mb-4">网站设置</h2>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-text">网站标题</p>
+                  <p className="text-sm text-textMuted">{user?.siteTitle || 'SecureVault密码管理器'}</p>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-text">网站图标</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <img 
+                      src={user?.siteIcon || 'https://djkl.qzz.io/file/1770081419896_头像.webp'} 
+                      alt="网站图标" 
+                      className="w-6 h-6 rounded"
+                    />
+                    <p className="text-sm text-textMuted truncate max-w-[200px]">
+                      {user?.siteIcon || 'https://djkl.qzz.io/file/1770081419896_头像.webp'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <Button onClick={() => setShowSiteSettings(true)} variant="secondary" className="w-full mt-2">
+                修改网站设置
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-surface border border-border rounded-xl p-6">
+            <h2 className="text-lg font-medium text-text mb-4">安全设置</h2>
+            <Button onClick={() => setShowChangePassword(true)} variant="secondary" className="w-full">
+              更改主密码
+            </Button>
+          </div>
+
+          <div className="bg-surface border border-border rounded-xl p-6">
+            <h2 className="text-lg font-medium text-text mb-4">数据管理</h2>
+            <div className="space-y-3">
+              <Button onClick={() => setShowCsvImport(true)} variant="secondary" className="w-full">
+                从 CSV 导入密码
+              </Button>
+              <p className="text-xs text-textMuted">
+                支持 Chrome、Firefox 等浏览器导出的 CSV 格式
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-surface border border-danger/30 rounded-xl p-6">
+            <h2 className="text-lg font-medium text-danger mb-2">危险区域</h2>
+            <p className="text-sm text-textMuted mb-4">
+              重置数据库将删除所有用户数据和密码，此操作不可恢复。
+            </p>
+            <Button variant="danger" onClick={() => setShowReset(true)}>
+              重置数据库
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <Modal isOpen={showSiteSettings} onClose={() => setShowSiteSettings(false)} title="网站设置" size="sm">
+        <form onSubmit={handleSiteSettings} className="space-y-4">
+          <Input
+            type="text"
+            label="网站标题"
+            placeholder="请输入网站标题"
+            value={siteTitle}
+            onChange={(e) => setSiteTitle(e.target.value)}
+            required
+          />
+          <div>
+            <label className="block text-sm font-medium text-text mb-1">网站图标 URL</label>
+            <Input
+              type="url"
+              placeholder="请输入图标URL"
+              value={siteIcon}
+              onChange={(e) => setSiteIcon(e.target.value)}
+              required
+            />
+            {siteIcon && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-xs text-textMuted">预览:</span>
+                <img src={siteIcon} alt="图标预览" className="w-8 h-8 rounded" onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }} />
+              </div>
+            )}
+          </div>
+          {siteSettingsError && (
+            <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
+              {siteSettingsError}
+            </div>
+          )}
+          {siteSettingsSuccess && (
+            <div className="p-3 bg-success/10 border border-success/20 rounded-lg text-success text-sm">
+              {siteSettingsSuccess}
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setShowSiteSettings(false)} className="flex-1">
+              取消
+            </Button>
+            <Button type="submit" className="flex-1" loading={siteSettingsLoading}>
+              保存
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={showChangePassword} onClose={() => setShowChangePassword(false)} title="更改主密码" size="sm">
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          <Input
+            type="password"
+            label="原密码"
+            placeholder="请输入原密码"
+            value={oldPassword}
+            onChange={(e) => setOldPassword(e.target.value)}
+            required
+          />
+          <Input
+            type="password"
+            label="新密码"
+            placeholder="请输入新密码"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+          />
+          <Input
+            type="password"
+            label="确认新密码"
+            placeholder="再次输入新密码"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
+          {passwordError && (
+            <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
+              {passwordError}
+            </div>
+          )}
+          {passwordSuccess && (
+            <div className="p-3 bg-success/10 border border-success/20 rounded-lg text-success text-sm">
+              {passwordSuccess}
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setShowChangePassword(false)} className="flex-1">
+              取消
+            </Button>
+            <Button type="submit" className="flex-1" loading={passwordLoading}>
+              确认更改
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal isOpen={showCsvImport} onClose={() => setShowCsvImport(false)} title="从 CSV 导入" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-textMuted">
+            选择一个 CSV 文件导入密码。支持的列名：name, url, username, password, notes
+          </p>
+          <label className="block">
+            <div className="w-full bg-surface border border-border border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primaryLight transition-colors">
+              <svg className="w-12 h-12 mx-auto text-textMuted mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span className="text-textMuted">点击选择 CSV 文件</span>
+            </div>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCsvImport}
+              className="hidden"
+              disabled={csvLoading}
+            />
+          </label>
+          {csvError && (
+            <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
+              {csvError}
+            </div>
+          )}
+          {csvSuccess && (
+            <div className="p-3 bg-success/10 border border-success/20 rounded-lg text-success text-sm">
+              {csvSuccess}
+            </div>
+          )}
+          <Button variant="secondary" onClick={() => setShowCsvImport(false)} className="w-full">
+            关闭
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showReset} onClose={() => setShowReset(false)} title="确认重置数据库" size="sm">
+        <div className="space-y-4">
+          <div className="p-4 bg-danger/10 border border-danger/20 rounded-lg">
+            <p className="text-danger font-medium mb-2">⚠️ 警告</p>
+            <p className="text-sm text-textMuted">
+              此操作将永久删除所有数据，包括用户账户和所有密码。此操作不可恢复！
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowReset(false)} className="flex-1">
+              取消
+            </Button>
+            <Button variant="danger" onClick={handleReset} loading={resetLoading} className="flex-1">
+              确认重置
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}

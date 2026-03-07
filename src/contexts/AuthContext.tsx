@@ -9,14 +9,15 @@ import {
   generateMasterKey,
   encryptMasterKey,
   decryptMasterKey,
-  hashPassword,
 } from '@/lib/crypto'
 import { verifyTOTP } from '@/lib/totp'
 
 interface User {
   id: string
-  email: string
+  username: string
   twoFactorEnabled: boolean
+  siteTitle: string
+  siteIcon: string
 }
 
 interface PendingUser extends User {
@@ -28,13 +29,15 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   masterKey: string | null
-  signUp: (email: string, password: string) => Promise<{ error: string | null }>
-  signIn: (email: string, password: string) => Promise<{ requires2FA: boolean; error: string | null }>
+  signUp: (username: string, password: string) => Promise<{ error: string | null }>
+  signIn: (username: string, password: string) => Promise<{ requires2FA: boolean; error: string | null }>
   verify2FA: (code: string) => Promise<{ error: string | null }>
   signOut: () => void
   unlockVault: (password: string) => Promise<{ error: string | null }>
   lockVault: () => void
   isVaultUnlocked: boolean
+  changePassword: (oldPassword: string, newPassword: string) => Promise<{ error: string | null }>
+  updateSiteSettings: (title: string, icon: string) => Promise<{ error: string | null }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -47,45 +50,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
+    const storedMasterKey = localStorage.getItem('masterKey')
     if (storedUser) {
-      setUser(JSON.parse(storedUser))
+      const userData = JSON.parse(storedUser)
+      setUser(userData)
+      if (storedMasterKey) {
+        setMasterKey(storedMasterKey)
+      }
     }
     setLoading(false)
   }, [])
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (username: string, password: string) => {
     try {
       const { data: existingUser } = await supabase
         .from('users')
         .select('id')
-        .eq('email', email)
+        .eq('username', username)
         .single()
 
       if (existingUser) {
-        return { error: 'Email already registered' }
+        return { error: '用户名已存在' }
       }
 
       const salt = generateSalt()
       const derivedKey = deriveKey(password, salt)
       const masterKey = generateMasterKey()
       const encryptedMasterKey = encryptMasterKey(masterKey, derivedKey)
-      const passwordHash = hashPassword(password)
 
       const userId = uuidv4()
       const { error } = await supabase.from('users').insert({
         id: userId,
-        email,
+        username,
         encrypted_master_key: encryptedMasterKey,
         salt,
         two_factor_enabled: false,
         two_factor_secret: null,
+        site_title: 'SecureVault密码管理器',
+        site_icon: 'https://djkl.qzz.io/file/1770081419896_头像.webp',
       })
 
       if (error) {
         return { error: error.message }
       }
 
-      const newUser = { id: userId, email, twoFactorEnabled: false }
+      const newUser = {
+        id: userId,
+        username,
+        twoFactorEnabled: false,
+        siteTitle: 'SecureVault密码管理器',
+        siteIcon: 'https://djkl.qzz.io/file/1770081419896_头像.webp',
+      }
       setUser(newUser)
       setMasterKey(masterKey)
       localStorage.setItem('user', JSON.stringify(newUser))
@@ -93,20 +108,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { error: null }
     } catch (err) {
-      return { error: 'An error occurred during registration' }
+      return { error: '注册过程中发生错误' }
     }
   }
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (username: string, password: string) => {
     try {
       const { data: userData, error } = await supabase
         .from('users')
         .select('*')
-        .eq('email', email)
+        .eq('username', username)
         .single()
 
       if (error || !userData) {
-        return { requires2FA: false, error: 'Invalid email or password' }
+        return { requires2FA: false, error: '用户名或密码错误' }
       }
 
       const derivedKey = deriveKey(password, userData.salt)
@@ -116,10 +131,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         const pendingUserData = {
           id: userData.id,
-          email: userData.email,
+          username: userData.username,
           twoFactorEnabled: userData.two_factor_enabled,
           masterKey: decryptedMasterKey,
           twoFactorSecret: userData.two_factor_secret,
+          siteTitle: userData.site_title,
+          siteIcon: userData.site_icon,
         }
 
         if (userData.two_factor_enabled) {
@@ -127,7 +144,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { requires2FA: true, error: null }
         }
 
-        const newUser = { id: userData.id, email: userData.email, twoFactorEnabled: false }
+        const newUser = {
+          id: userData.id,
+          username: userData.username,
+          twoFactorEnabled: false,
+          siteTitle: userData.site_title,
+          siteIcon: userData.site_icon,
+        }
         setUser(newUser)
         setMasterKey(decryptedMasterKey)
         localStorage.setItem('user', JSON.stringify(newUser))
@@ -135,27 +158,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return { requires2FA: false, error: null }
       } catch {
-        return { requires2FA: false, error: 'Invalid email or password' }
+        return { requires2FA: false, error: '用户名或密码错误' }
       }
     } catch (err) {
-      return { requires2FA: false, error: 'An error occurred during sign in' }
+      return { requires2FA: false, error: '登录过程中发生错误' }
     }
   }
 
   const verify2FA = async (code: string) => {
     if (!pendingUser || !pendingUser.twoFactorSecret) {
-      return { error: 'No pending 2FA verification' }
+      return { error: '无待验证的2FA' }
     }
 
     const isValid = verifyTOTP(pendingUser.twoFactorSecret, code)
     if (!isValid) {
-      return { error: 'Invalid verification code' }
+      return { error: '验证码无效' }
     }
 
     const newUser = {
       id: pendingUser.id,
-      email: pendingUser.email,
+      username: pendingUser.username,
       twoFactorEnabled: pendingUser.twoFactorEnabled,
+      siteTitle: pendingUser.siteTitle,
+      siteIcon: pendingUser.siteIcon,
     }
     setUser(newUser)
     setMasterKey(pendingUser.masterKey)
@@ -175,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const unlockVault = async (password: string) => {
     if (!user) {
-      return { error: 'Not authenticated' }
+      return { error: '未登录' }
     }
 
     try {
@@ -186,7 +211,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single()
 
       if (error || !userData) {
-        return { error: 'Failed to unlock vault' }
+        return { error: '解锁保险库失败' }
       }
 
       const derivedKey = deriveKey(password, userData.salt)
@@ -197,13 +222,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { error: null }
     } catch {
-      return { error: 'Invalid password' }
+      return { error: '密码错误' }
     }
   }
 
   const lockVault = () => {
     setMasterKey(null)
     localStorage.removeItem('masterKey')
+  }
+
+  const changePassword = async (oldPassword: string, newPassword: string) => {
+    if (!user) {
+      return { error: '未登录' }
+    }
+
+    try {
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (error || !userData) {
+        return { error: '获取用户数据失败' }
+      }
+
+      const oldDerivedKey = deriveKey(oldPassword, userData.salt)
+      
+      let decryptedMasterKey: string
+      try {
+        decryptedMasterKey = decryptMasterKey(userData.encrypted_master_key, oldDerivedKey)
+      } catch {
+        return { error: '原密码错误' }
+      }
+
+      const newSalt = generateSalt()
+      const newDerivedKey = deriveKey(newPassword, newSalt)
+      const newEncryptedMasterKey = encryptMasterKey(decryptedMasterKey, newDerivedKey)
+
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          encrypted_master_key: newEncryptedMasterKey,
+          salt: newSalt,
+        })
+        .eq('id', user.id)
+
+      if (updateError) {
+        return { error: updateError.message }
+      }
+
+      return { error: null }
+    } catch (err) {
+      return { error: '更改密码失败' }
+    }
+  }
+
+  const updateSiteSettings = async (title: string, icon: string) => {
+    if (!user) {
+      return { error: '未登录' }
+    }
+
+    try {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          site_title: title,
+          site_icon: icon,
+        })
+        .eq('id', user.id)
+
+      if (updateError) {
+        return { error: updateError.message }
+      }
+
+      const updatedUser = { ...user, siteTitle: title, siteIcon: icon }
+      setUser(updatedUser)
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+
+      return { error: null }
+    } catch (err) {
+      return { error: '更新设置失败' }
+    }
   }
 
   return (
@@ -219,6 +319,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         unlockVault,
         lockVault,
         isVaultUnlocked: !!masterKey,
+        changePassword,
+        updateSiteSettings,
       }}
     >
       {children}

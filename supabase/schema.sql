@@ -1,11 +1,13 @@
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
+  username VARCHAR(255) UNIQUE NOT NULL,
   encrypted_master_key TEXT NOT NULL,
   salt VARCHAR(255) NOT NULL,
   two_factor_enabled BOOLEAN DEFAULT FALSE,
   two_factor_secret VARCHAR(255),
+  site_title VARCHAR(255) DEFAULT 'SecureVault密码管理器',
+  site_icon TEXT DEFAULT 'https://djkl.qzz.io/file/1770081419896_头像.webp',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -35,7 +37,7 @@ CREATE TABLE IF NOT EXISTS folders (
 CREATE INDEX IF NOT EXISTS idx_vault_items_user_id ON vault_items(user_id);
 CREATE INDEX IF NOT EXISTS idx_vault_items_folder_id ON vault_items(folder_id);
 CREATE INDEX IF NOT EXISTS idx_folders_user_id ON folders(user_id);
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 -- Enable Row Level Security
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;

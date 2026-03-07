@@ -11,31 +11,37 @@ export type Database = {
       users: {
         Row: {
           id: string
-          email: string
+          username: string
           encrypted_master_key: string
           salt: string
           two_factor_enabled: boolean
           two_factor_secret: string | null
+          site_title: string
+          site_icon: string
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          email: string
+          username: string
           encrypted_master_key: string
           salt: string
           two_factor_enabled?: boolean
           two_factor_secret?: string | null
+          site_title?: string
+          site_icon?: string
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          email?: string
+          username?: string
           encrypted_master_key?: string
           salt?: string
           two_factor_enabled?: boolean
           two_factor_secret?: string | null
+          site_title?: string
+          site_icon?: string
           created_at?: string
           updated_at?: string
         }
