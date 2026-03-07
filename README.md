@@ -26,21 +26,15 @@
 ![image.png](https://djkl.qzz.io/file/music/1772872359702_image.png)
 ![image.png](https://djkl.qzz.io/file/music/1772872351071_image.png)
 
-## 🚀 部署
+## 🚀 部署到 Vercel
 
-### 方式一：Vercel
+### 步骤 1：一键部署
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdjklmin%2Fpassword)
 
-### 方式二：Netlify
+点击上方按钮，将项目克隆到你的 GitHub 并部署到 Vercel。
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/djklmin/password)
-
----
-
-## 📋 部署步骤
-
-### 步骤 1：创建 Supabase 项目
+### 步骤 2：创建 Supabase 项目
 
 1. 访问 [supabase.com](https://supabase.com) 注册并创建新项目
 2. 进入 SQL Editor，执行以下 SQL：
@@ -118,24 +112,21 @@ CREATE TRIGGER update_vault_items_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 ```
 
-### 步骤 2：配置环境变量
+### 步骤 3：配置环境变量
 
-在 Supabase 控制台，进入 Settings → API，复制以下信息：
+1. 在 Supabase 控制台，进入 Settings → API
+2. 复制 Project URL 和 anon public key
+3. 在 Vercel 项目中，进入 Settings → Environment Variables
+4. 添加以下变量：
 
 | 变量名 | 值 |
 |--------|-----|
 | `NEXT_PUBLIC_SUPABASE_URL` | 你的 Supabase Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 你的 Supabase anon key |
 
-#### Vercel 配置
-1. 在 Vercel 项目中，进入 Settings → Environment Variables
-2. 添加上述两个变量
-3. 点击 Redeploy 重新部署
+### 步骤 4：重新部署
 
-#### Netlify 配置
-1. 在 Netlify 项目中，进入 Site settings → Build & deploy → Environment
-2. 添加上述两个变量
-3. 触发重新部署
+在 Vercel 控制台点击 Redeploy，项目即可正常运行。
 
 ---
 
@@ -156,7 +147,7 @@ CREATE TRIGGER update_vault_items_updated_at
 | 前端 | Next.js 14 + TypeScript + Tailwind CSS |
 | 后端 | Supabase (PostgreSQL) |
 | 加密 | CryptoJS (AES-256-CBC) |
-| 部署 | Vercel / Netlify |
+| 部署 | Vercel |
 
 ## 🎯 使用说明
 

@@ -119,7 +119,7 @@ export function LoginForm() {
     }
   }
 
-  const isLocked = lockoutUntil && lockoutUntil > Date.now()
+  const isLocked = !!(lockoutUntil && lockoutUntil > Date.now())
 
   return (
     <div className="bg-surface border border-border rounded-xl p-6">

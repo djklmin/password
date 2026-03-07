@@ -48,7 +48,11 @@ export function decrypt(encryptedData: string, key: CryptoJS.lib.WordArray): str
         padding: CryptoJS.pad.Pkcs7,
       }
     )
-    return decrypted.toString(CryptoJS.enc.Utf8)
+    const result = decrypted.toString(CryptoJS.enc.Utf8)
+    if (!result || result.length === 0) {
+      throw new Error('Decryption failed - empty result')
+    }
+    return result
   } catch {
     throw new Error('Decryption failed')
   }

@@ -74,7 +74,6 @@ export function EditItemModal({ isOpen, onClose, item }: EditItemModalProps) {
 
   const handleGeneratePassword = () => {
     const password = generateRandomPassword(16, {
-      length: 16,
       uppercase: true,
       lowercase: true,
       numbers: true,
